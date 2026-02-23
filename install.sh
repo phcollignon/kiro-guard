@@ -14,6 +14,7 @@ set -eu
 INSTALL_DIR="/usr/local/lib/kiro-guard"
 BIN_DIR="/usr/local/bin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+RESTRICTED_USER="kiro-runner"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "Error: Run this script as root: sudo bash install.sh" >&2
@@ -64,10 +65,23 @@ for bin_name in kiro-cli kiro; do
     done
 
     if [ -n "$found" ]; then
-        rm -f "$BIN_DIR/$bin_name"          # remove old symlink or stale copy first
-        cp "$found" "$BIN_DIR/$bin_name"
-        chmod a+rx "$BIN_DIR/$bin_name"
-        echo "  Copied : $found → $BIN_DIR/$bin_name"
+        # Grant kiro-runner execute permission on the binary itself
+        setfacl -m "u:$RESTRICTED_USER:rx" "$found"
+        echo "  Granted rx: $found"
+
+        # Grant kiro-runner --x (traverse only) on every parent directory
+        # in the path, so the kernel can resolve the path at exec() time.
+        dir="$(dirname "$found")"
+        while [ "$dir" != "/" ]; do
+            setfacl -m "u:$RESTRICTED_USER:--x" "$dir"
+            echo "  Granted --x: $dir"
+            dir="$(dirname "$dir")"
+        done
+
+        # Also create a symlink in BIN_DIR so kiro-runner uses the real binary
+        rm -f "$BIN_DIR/$bin_name"
+        ln -s "$found" "$BIN_DIR/$bin_name"
+        echo "  Symlinked: $found → $BIN_DIR/$bin_name"
     elif [ -x "$BIN_DIR/$bin_name" ]; then
         echo "  Already in $BIN_DIR: $bin_name"
     else
