@@ -135,7 +135,7 @@ echo "════════════════════════�
 echo ""
 echo "Next steps:"
 echo "  1. First-time login: kiro-guard login"
-echo "  2. Run Kiro:         kiro-guard run \"your prompt\""
+echo "  2. Run Kiro:         kiro-guard run"
 echo "  3. Verify lockdown:  kiro-guard test"
 echo ""
 echo "Inspect ACLs on any path with: getfacl <path>"

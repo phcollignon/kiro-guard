@@ -178,7 +178,8 @@ def cmd_run():
     print(f"Opening kiro-cli as '{RESTRICTED_USER}'...(Ctrl+C to exit)\n")
     kiro_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, kiro_bin])
+        # -H sets HOME to kiro-runner's home so kiro-cli finds its own config/creds
+        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin])
     elif OS == "Windows":
         run(f'runas /user:{RESTRICTED_USER} "{kiro_bin}"', shell=True)
     else:
@@ -194,7 +195,7 @@ def cmd_ask(prompt: str):
     print(f"Asking Kiro as '{RESTRICTED_USER}'...\n")
     kiro_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, kiro_bin, prompt])
+        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin, prompt])
     elif OS == "Windows":
         run(f'runas /user:{RESTRICTED_USER} "{kiro_bin} \\"{prompt}\\""', shell=True)
     else:
@@ -209,7 +210,7 @@ def cmd_login():
     # Resolve the binary to its absolute path before switching users.
     kiro_cli_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, kiro_cli_bin, "login", "--use-device-flow"])
+        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_cli_bin, "login", "--use-device-flow"])
     elif OS == "Windows":
         run(f'runas /user:{RESTRICTED_USER} "{kiro_cli_bin} login --use-device-flow"', shell=True)
     else:
