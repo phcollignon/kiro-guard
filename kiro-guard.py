@@ -106,16 +106,29 @@ def run(cmd, **kwargs) -> int:
 
 def resolve_bin(name: str) -> str:
     """
-    Return the absolute path of a binary visible to the *current* user.
-    sudo -u strips PATH, so we must pass the full path explicitly.
-    Exits with a helpful message if the binary is not found.
+    Return the absolute path of a binary that kiro-runner can execute.
+
+    sudo -u / runas strips PATH, so we pass the full path explicitly.
+    We prefer system-wide locations (/usr/local/bin, /usr/bin) over user-local
+    ones (~/.local/bin) because kiro-runner cannot traverse other users' home
+    directories.  install.sh symlinks kiro-cli there for exactly this reason.
     """
+    # Prefer system-wide locations that any user (including kiro-runner) can reach
+    system_paths = ["/usr/local/bin", "/usr/bin", "/bin"]
+    for directory in system_paths:
+        candidate = os.path.join(directory, name)
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+
+    # Fall back to whatever is on the current user's PATH
     path = shutil.which(name)
-    if not path:
-        print(f"Error: '{name}' not found in PATH.")
-        print(f"Make sure Kiro is installed and on your PATH, then retry.")
-        sys.exit(1)
-    return path
+    if path:
+        return path
+
+    print(f"Error: '{name}' not found in PATH.")
+    print(f"Run 'sudo bash install.sh' to symlink Kiro binaries into /usr/local/bin,")
+    print(f"or make sure Kiro is installed system-wide.")
+    sys.exit(1)
 
 
 # ── Commands ───────────────────────────────────────────────────────────────────
