@@ -118,10 +118,10 @@ for abs_path in "${RESOLVED_PATHS[@]}"; do
     if [ -e "$abs_path" ]; then
         setfacl -R -m "u:$RESTRICTED_USER:---" "$abs_path"
         echo "  LOCKED : $rel"
-        ((LOCKED++))
+        LOCKED=$((LOCKED + 1))
     else
         echo "  SKIPPED: $rel (not found)"
-        ((SKIPPED++))
+        SKIPPED=$((SKIPPED + 1))
     fi
 done
 
