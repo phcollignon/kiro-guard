@@ -8,13 +8,13 @@ Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocke
 
 By default, Kiro runs as **you** and has access to every file you can read — including secrets, credentials, and private keys.
 
-![Kiro running as the current user with full access to all project files](kiro-guard2.png)
+![Kiro running as the current user with full access to all project files](kiro-guard_ko.png)
 
 ## The solution
 
 Kiro-Guard runs Kiro as a dedicated restricted user (`kiro-runner`). Sensitive paths are locked at the OS level with explicit **deny** ACLs — so even if Kiro is compromised or misbehaving, it gets a hard `Permission Denied`.
 
-![Kiro running as kiro-runner, blocked from protected files by OS-level ACLs](kiro-guard.png)
+![Kiro running as kiro-runner, blocked from protected files by OS-level ACLs](kiro-guard_ok.png)
 
 `kiro-guard` walks up the directory tree from wherever you call it to find the nearest `.kiro-guard` file — just like `git` finds `.git`. Once installed on your PATH, you never need to `cd` to the project root first.
 
