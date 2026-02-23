@@ -66,8 +66,13 @@ fi
 echo ""
 echo "Resetting previous ACLs for '$RESTRICTED_USER'..."
 setfacl -R -x "u:$RESTRICTED_USER" "$PROJECT_ROOT" 2>/dev/null || true
-setfacl -m "u:$RESTRICTED_USER:rx" "$PROJECT_ROOT"
-echo "  Granted rx on project root."
+
+# Grant kiro-runner read+write on the whole project root.
+# Capital X = execute only on directories (traverse) and existing executables —
+# not on regular source files.  Deny rules applied below override this grant
+# for locked paths.
+setfacl -R -m "u:$RESTRICTED_USER:rwX" "$PROJECT_ROOT"
+echo "  Granted rwX recursively on project root."
 
 # ── Build list of resolved absolute paths ─────────────────────────────────────
 # If called from kiro-guard.py, $2 is a temp file with one absolute path per line.

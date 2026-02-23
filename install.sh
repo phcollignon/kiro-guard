@@ -65,23 +65,15 @@ for bin_name in kiro-cli kiro; do
     done
 
     if [ -n "$found" ]; then
-        # Grant kiro-runner execute permission on the binary itself
-        setfacl -m "u:$RESTRICTED_USER:rx" "$found"
-        echo "  Granted rx: $found"
-
-        # Grant kiro-runner --x (traverse only) on every parent directory
-        # in the path, so the kernel can resolve the path at exec() time.
-        dir="$(dirname "$found")"
-        while [ "$dir" != "/" ]; do
-            setfacl -m "u:$RESTRICTED_USER:--x" "$dir"
-            echo "  Granted --x: $dir"
-            dir="$(dirname "$dir")"
-        done
-
-        # Also create a symlink in BIN_DIR so kiro-runner uses the real binary
+        # Copy the binary into BIN_DIR as a standalone world-executable file.
+        # Using cp (not ln -s) means kiro-runner executes /usr/local/bin/kiro-cli
+        # directly — no ACL grants on admin's home directory needed, and a sync
+        # run can never revoke the grant by resetting ACLs inside admin's home.
         rm -f "$BIN_DIR/$bin_name"
-        ln -s "$found" "$BIN_DIR/$bin_name"
-        echo "  Symlinked: $found → $BIN_DIR/$bin_name"
+        cp "$found" "$BIN_DIR/$bin_name"
+        chown root:root "$BIN_DIR/$bin_name"
+        chmod a+rx "$BIN_DIR/$bin_name"
+        echo "  Copied: $found → $BIN_DIR/$bin_name"
     elif [ -x "$BIN_DIR/$bin_name" ]; then
         echo "  Already in $BIN_DIR: $bin_name"
     else
