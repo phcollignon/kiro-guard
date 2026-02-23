@@ -33,6 +33,7 @@ cp "$SCRIPT_DIR/kg-sync-mac.sh"  "$INSTALL_DIR/"
 chmod +x "$INSTALL_DIR/kg-sync-mac.sh"
 
 # ── Install global wrapper ────────────────────────────────────────────────────
+mkdir -p "$BIN_DIR"
 cat > "$BIN_DIR/kiro-guard" << 'EOF'
 #!/bin/bash
 exec python3 /usr/local/lib/kiro-guard/kiro-guard.py "$@"
@@ -66,8 +67,11 @@ for bin_name in kiro-cli kiro; do
 
     if [ -n "$found" ]; then
         # Grant kiro-runner read+execute on the binary
-        chmod +a "$RESTRICTED_USER allow read,execute" "$found"
-        echo "  Granted rx: $found"
+        if chmod +a "$RESTRICTED_USER allow read,execute" "$found" 2>/dev/null; then
+            echo "  Granted rx: $found"
+        else
+            echo "  Warning: could not set ACL on $found (ACLs may not be supported)"
+        fi
 
         # Grant kiro-runner traverse (--x only) on every parent directory
         dir="$(dirname "$found")"
