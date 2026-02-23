@@ -89,6 +89,40 @@ for bin_name in kiro-cli kiro; do
     fi
 done
 
+# ── Provision kiro-runner's home with companion binaries ──────────────────────
+# kiro-cli looks for companion binaries (e.g. kiro-cli-chat) in the *running*
+# user's ~/.local/bin/ — so we must install them there for kiro-runner too.
+KIRO_RUNNER_HOME="$(getent passwd "$RESTRICTED_USER" | cut -d: -f6)"
+KIRO_RUNNER_BIN="$KIRO_RUNNER_HOME/.local/bin"
+
+if [ -n "$KIRO_RUNNER_HOME" ] && [ -d "$KIRO_RUNNER_HOME" ]; then
+    echo ""
+    echo "Provisioning $RESTRICTED_USER home with Kiro companion binaries..."
+    mkdir -p "$KIRO_RUNNER_BIN"
+    chown "$RESTRICTED_USER:$RESTRICTED_USER" "$KIRO_RUNNER_HOME/.local" \
+          "$KIRO_RUNNER_HOME/.local/bin" 2>/dev/null || true
+
+    # All kiro-cli-* binaries (companions like kiro-cli-chat, kiro-cli-server …)
+    companion_found=0
+    if [ -n "$SUDO_USER_HOME" ]; then
+        for companion in "$SUDO_USER_HOME/.local/bin/kiro-cli-"*; do
+            [ -x "$companion" ] || continue
+            dest="$KIRO_RUNNER_BIN/$(basename "$companion")"
+            cp "$companion" "$dest"
+            chown "$RESTRICTED_USER:$RESTRICTED_USER" "$dest"
+            chmod 755 "$dest"
+            echo "  Copied companion: $(basename "$companion") → $KIRO_RUNNER_BIN/"
+            companion_found=1
+        done
+    fi
+
+    if [ "$companion_found" -eq 0 ]; then
+        echo "  No companion binaries found (expected kiro-cli-* in $SUDO_USER_HOME/.local/bin/)"
+    fi
+else
+    echo "  Warning: could not find home directory for '$RESTRICTED_USER'"
+fi
+
 echo ""
 echo "✔  Done! You can now run 'kiro-guard' from anywhere."
 echo ""
