@@ -1,6 +1,6 @@
 # Kiro-Guard 🛡️
 
-Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using POSIX ACLs (`setfacl`) on Linux.
+Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using native filesystem ACLs on Linux and macOS.
 
 ---
 
@@ -18,9 +18,10 @@ Kiro-Guard runs Kiro as a dedicated restricted user (`kiro-runner`). Sensitive p
 
 `kiro-guard` walks up the directory tree from wherever you call it to find the nearest `.kiro-guard` file — just like `git` finds `.git`. Once installed on your PATH, you never need to `cd` to the project root first.
 
-| Mechanism | Tool |
-|-----------|------|
-| POSIX ACL deny rules | `setfacl` |
+| Platform | Mechanism | Tool |
+|----------|-----------|------|
+| Linux (Ubuntu/WSL) | POSIX ACL deny rules | `setfacl` |
+| macOS | macOS ACL deny rules | `chmod +a` |
 
 ---
 
@@ -28,10 +29,12 @@ Kiro-Guard runs Kiro as a dedicated restricted user (`kiro-runner`). Sensitive p
 
 ```
 kiro-guard/
-├── .kiro-guard        ← Your exclusion list (one path or glob per line)
-├── kiro-guard.py      ← Launcher (sync, run, ask, login, status, test)
-├── kg-sync.sh         ← Applies ACL rules via setfacl
-├── install.sh         ← Installs kiro-guard globally on PATH
+├── .kiro-guard          ← Your exclusion list (one path or glob per line)
+├── kiro-guard.py        ← Launcher (sync, run, ask, login, status, test)
+├── kg-sync.sh           ← Linux: apply ACL rules via setfacl
+├── kg-sync-mac.sh       ← macOS: apply ACL rules via chmod +a
+├── install.sh           ← Linux: install kiro-guard globally on PATH
+├── install-mac.sh       ← macOS: install kiro-guard globally on PATH
 └── README.md
 ```
 
@@ -41,13 +44,19 @@ kiro-guard/
 
 Run once — after this you can call `kiro-guard` from anywhere.
 
+**Linux:**
 ```bash
 sudo bash install.sh
 ```
+Requires: `sudo apt install acl`
 
-Installs to `/usr/local/lib/kiro-guard/`, creates a `/usr/local/bin/kiro-guard` wrapper, and copies `kiro-cli` companion binaries into `kiro-runner`'s home so they can run headlessly.
+**macOS:**
+```bash
+sudo bash install-mac.sh
+```
+No extra packages needed — uses built-in `chmod +a` ACL support.
 
-> **Requires:** `acl` package — `sudo apt install acl`
+Both installers deploy to `/usr/local/lib/kiro-guard/` and create a `/usr/local/bin/kiro-guard` wrapper. They also copy `kiro-cli` companion binaries into `kiro-runner`'s home so they can run headlessly.
 
 ---
 
@@ -115,12 +124,14 @@ This will:
 kiro-guard login
 ```
 
-Since `kiro-runner` runs headless (no display), login uses **device flow** — it prints a URL and a short code. Open the URL in **your own browser**, enter the code, and approve. Tokens are stored under `/home/kiro-runner/`.
+Since `kiro-runner` runs headless (no display), login uses **device flow** — it prints a URL and a short code. Open the URL in **your own browser**, enter the code, and approve.
 
 ```
 ▰▰▰▱▱▱▱ Waiting for browser...
 Open this URL: https://auth.kiro.dev/device?user_code=XXXX-XXXX
 ```
+
+Tokens are stored under `/home/kiro-runner/` (Linux) or `/var/kiro-runner/` (macOS).
 
 ---
 
@@ -142,7 +153,7 @@ kiro-guard ask "which files do you have access to?"
 
 | Command | Description |
 |---------|-------------|
-| `kiro-guard sync` | Apply `.kiro-guard` rules via `setfacl` |
+| `kiro-guard sync` | Apply `.kiro-guard` rules to the OS |
 | `kiro-guard run` | Open `kiro-cli` **interactively** as `kiro-runner` |
 | `kiro-guard ask "prompt"` | Send a **one-shot prompt** to `kiro-cli` |
 | `kiro-guard login` | First-time login via device flow |
@@ -165,8 +176,13 @@ kiro-guard test
 
 Or manually:
 ```bash
+# Linux
 getfacl my-secret/
 # Expected line: user:kiro-runner:---
+
+# macOS
+ls -le my-secret/
+# Expected line: 0: user:kiro-runner deny read,write,execute,...
 ```
 
 ---
@@ -175,29 +191,44 @@ getfacl my-secret/
 
 `chmod` works on 3 broad categories: **Owner / Group / Others**. There is no way to block a single specific user without affecting everyone else.
 
-`setfacl` lets you say: *"Block specifically `kiro-runner`, leave everything else untouched."*
+`setfacl` (Linux) and `chmod +a` (macOS) let you say: *"Block specifically `kiro-runner`, leave everything else untouched."*
 
-| Feature | `chmod` | `setfacl` |
-|---------|---------|-----------|
+| Feature | `chmod` | `setfacl` / `chmod +a` |
+|---------|---------|------------------------|
 | Target specific user | ❌ | ✅ |
 | Granularity | Broad (3 categories) | Fine-grained (per user) |
 | Risk of locking yourself out | High | Low |
-| View rules | `ls -l` | `getfacl` |
+| View rules | `ls -l` | `getfacl` / `ls -le` |
 
 ---
 
 ## Troubleshooting
 
-**`setfacl: command not found`**
+**`setfacl: command not found` (Linux)**
 ```bash
 sudo apt install acl
 ```
 
+**`chmod +a` fails (macOS)**
+
+Make sure the filesystem supports ACLs (APFS and HFS+ do by default). For network volumes, ACLs may need to be enabled separately.
+
+**macOS: `sudo -u kiro-runner` fails**
+
+Ensure `kiro-runner` was created by `kg-sync-mac.sh`. You can verify with:
+```bash
+dscl . -read /Users/kiro-runner
+```
+
 **Parent directory permission error**
 
-`kiro-runner` needs execute (`--x`) on every folder in the path to your project. On bare Ubuntu the home directory may be `700`. Fix:
+`kiro-runner` needs traverse permission (`--x` on Linux, `search` on macOS) on every folder in the path to your project. Fix:
 ```bash
+# Linux
 chmod o+x /home/your-username
+
+# macOS
+chmod +a "kiro-runner allow execute,search" /Users/your-username
 ```
 
 **Kiro can still read a file after sync**
@@ -212,11 +243,17 @@ kiro-guard test
 
 ## Cleanup
 
-To remove the restricted user and all its ACL rules:
-
+**Linux:**
 ```bash
 sudo setfacl -R -x user:kiro-runner .
 sudo deluser --remove-home kiro-runner
+```
+
+**macOS:**
+```bash
+sudo chmod -R -a "kiro-runner deny read,write,execute,delete,list,search,add_file,add_subdirectory,readattr,writeattr,readextattr,writeextattr,readsecurity" .
+sudo dscl . delete /Users/kiro-runner
+sudo rm -rf /var/kiro-runner
 ```
 
 ---

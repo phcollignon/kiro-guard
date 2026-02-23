@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-kiro-guard.py — Linux launcher for Kiro with filesystem ACL access control.
+kiro-guard.py — Linux/macOS launcher for Kiro with filesystem ACL access control.
 
 Can be installed globally on PATH. Automatically walks up the directory tree
 to find the nearest .kiro-guard file (like git finds .git).
@@ -15,10 +15,12 @@ Usage:
     kiro-guard test            # Verify restricted user cannot read guarded paths
 
 Requires:
-    setfacl / acl package (sudo apt install acl)
+    Linux : setfacl / acl package (sudo apt install acl)
+    macOS : built-in chmod +a ACL support (no extra packages needed)
 """
 
 import os
+import platform
 import shutil
 import subprocess
 import sys
@@ -28,8 +30,9 @@ from pathlib import Path
 # ── Configuration ──────────────────────────────────────────────────────────────
 RESTRICTED_USER = "kiro-runner"
 GUARD_FILENAME  = ".kiro-guard"
+OS = platform.system()  # "Linux" | "Darwin"
 
-# Directory where this script lives (used to find kg-sync.sh)
+# Directory where this script lives (used to find kg-sync.sh / kg-sync-mac.sh)
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -104,22 +107,22 @@ def resolve_bin(name: str) -> str:
     Return the absolute path of a binary that kiro-runner can execute.
 
     sudo -u strips PATH, so we pass the full path explicitly.
-    We prefer system-wide locations (/usr/local/bin, /usr/bin) over user-local
-    ones (~/.local/bin) because kiro-runner cannot traverse other users' home
-    directories. install.sh symlinks/copies kiro-cli there for exactly this reason.
+    We prefer system-wide locations (/usr/local/bin, /usr/bin) that kiro-runner
+    can reach. install.sh / install-mac.sh symlink kiro-cli there.
     """
-    for directory in ("/usr/local/bin", "/usr/bin", "/bin"):
+    system_paths = ["/usr/local/bin", "/usr/bin", "/bin", "/opt/homebrew/bin"]
+    for directory in system_paths:
         candidate = os.path.join(directory, name)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
 
-    # Fall back to whatever is on the current user's PATH
     path = shutil.which(name)
     if path:
         return path
 
     print(f"Error: '{name}' not found in PATH.")
-    print("Run 'sudo bash install.sh' to copy Kiro binaries into /usr/local/bin,")
+    installer = "install-mac.sh" if OS == "Darwin" else "install.sh"
+    print(f"Run 'sudo bash {installer}' to copy Kiro binaries into /usr/local/bin,")
     print("or make sure Kiro is installed system-wide.")
     sys.exit(1)
 
@@ -129,18 +132,27 @@ def resolve_bin(name: str) -> str:
 def cmd_sync(guard_root: str):
     """
     Expand globs, write resolved absolute paths to a temp file,
-    then call kg-sync.sh with that file.
+    then call the OS-specific sync script with that file.
     """
     patterns = read_raw_patterns(guard_root)
     resolved = expand_patterns(guard_root, patterns)
 
     print(f"Project root : {guard_root}")
     print(f"Patterns     : {len(patterns)} rule(s) → {len(resolved)} resolved path(s)")
-    print("Syncing on Linux...\n")
 
-    script = os.path.join(SCRIPT_DIR, "kg-sync.sh")
+    if OS == "Linux":
+        script_name = "kg-sync.sh"
+        print("Syncing on Linux...\n")
+    elif OS == "Darwin":
+        script_name = "kg-sync-mac.sh"
+        print("Syncing on macOS...\n")
+    else:
+        print(f"Unsupported OS: {OS} (supported: Linux, macOS)")
+        sys.exit(1)
+
+    script = os.path.join(SCRIPT_DIR, script_name)
     if not os.path.isfile(script):
-        print(f"Error: 'kg-sync.sh' not found at '{SCRIPT_DIR}'.")
+        print(f"Error: '{script_name}' not found at '{SCRIPT_DIR}'.")
         sys.exit(1)
 
     with tempfile.NamedTemporaryFile(
@@ -177,7 +189,7 @@ def cmd_ask(prompt: str):
 def cmd_login():
     """Perform first-time Kiro CLI login as the restricted user."""
     print(f"Starting Kiro login for user '{RESTRICTED_USER}'...\n")
-    # sudo -u strips PATH; resolve the binary to its absolute path first.
+    # sudo -u strips PATH; resolve to absolute path first.
     # --use-device-flow avoids opening a browser in the headless restricted session.
     kiro_cli_bin = resolve_bin("kiro-cli")
     run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_cli_bin, "login", "--use-device-flow"])
@@ -198,13 +210,22 @@ def cmd_status(guard_root: str):
         tag = "EXISTS   " if exists else "NOT FOUND"
         print(f"  [{tag}] {rel}")
         if exists:
-            result = subprocess.run(
-                ["getfacl", "--omit-header", abs_path],
-                capture_output=True, text=True
-            )
-            for line in result.stdout.splitlines():
-                if RESTRICTED_USER in line or line.startswith("user::") or line.startswith("other::"):
-                    print(f"             {line}")
+            if OS == "Linux":
+                result = subprocess.run(
+                    ["getfacl", "--omit-header", abs_path],
+                    capture_output=True, text=True
+                )
+                for line in result.stdout.splitlines():
+                    if RESTRICTED_USER in line or line.startswith("user::") or line.startswith("other::"):
+                        print(f"             {line}")
+            elif OS == "Darwin":
+                result = subprocess.run(
+                    ["ls", "-led", abs_path],
+                    capture_output=True, text=True
+                )
+                for line in result.stdout.splitlines():
+                    if RESTRICTED_USER in line or line.startswith("0:") or not line.startswith(" "):
+                        print(f"             {line}")
         print()
 
 
@@ -243,10 +264,10 @@ def cmd_test(guard_root: str):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 USAGE = """
-Kiro-Guard — Restrict Kiro AI access to sensitive files (Linux)
+Kiro-Guard — Restrict Kiro AI access to sensitive files (Linux & macOS)
 
 Usage:
-  kiro-guard sync              Apply .kiro-guard rules via setfacl (requires sudo)
+  kiro-guard sync              Apply .kiro-guard rules to the OS
   kiro-guard run               Open kiro-cli interactively as the restricted user
   kiro-guard ask "prompt"      Send a one-shot prompt to kiro-cli
   kiro-guard login             First-time login as restricted user (device flow)
