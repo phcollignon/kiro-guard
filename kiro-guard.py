@@ -183,9 +183,9 @@ def cmd_login():
     # Resolve the binary to its absolute path before switching users.
     kiro_cli_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, kiro_cli_bin, "login"])
+        run(["sudo", "-u", RESTRICTED_USER, kiro_cli_bin, "login", "--use-device-flow"])
     elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "{kiro_cli_bin} login"', shell=True)
+        run(f'runas /user:{RESTRICTED_USER} "{kiro_cli_bin} login --use-device-flow"', shell=True)
     else:
         print(f"Unsupported OS: {OS}")
         sys.exit(1)
