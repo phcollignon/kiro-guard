@@ -1,6 +1,6 @@
 # Kiro-Guard 🛡️
 
-Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using native filesystem ACLs on both Linux and Windows.
+Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using POSIX ACLs (`setfacl`) on Linux.
 
 ---
 
@@ -8,20 +8,19 @@ Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocke
 
 By default, Kiro runs as **you** and has access to every file you can read — including secrets, credentials, and private keys.
 
-![kiro-guard2.png — Kiro running as the current user with full access to all project files](kiro-guard2.png)
+![Kiro running as the current user with full access to all project files](kiro-guard2.png)
 
 ## The solution
 
 Kiro-Guard runs Kiro as a dedicated restricted user (`kiro-runner`). Sensitive paths are locked at the OS level with explicit **deny** ACLs — so even if Kiro is compromised or misbehaving, it gets a hard `Permission Denied`.
 
-![kiro-guard.png — Kiro running as kiro-runner, blocked from protected files by OS-level ACLs](kiro-guard.png)
+![Kiro running as kiro-runner, blocked from protected files by OS-level ACLs](kiro-guard.png)
 
 `kiro-guard` walks up the directory tree from wherever you call it to find the nearest `.kiro-guard` file — just like `git` finds `.git`. Once installed on your PATH, you never need to `cd` to the project root first.
 
-| Platform | Mechanism | Tool |
-|----------|-----------|------|
-| Linux (Ubuntu/WSL) | POSIX ACL deny rules | `setfacl` |
-| Windows | NTFS ACL deny rules | `icacls` |
+| Mechanism | Tool |
+|-----------|------|
+| POSIX ACL deny rules | `setfacl` |
 
 ---
 
@@ -29,34 +28,26 @@ Kiro-Guard runs Kiro as a dedicated restricted user (`kiro-runner`). Sensitive p
 
 ```
 kiro-guard/
-├── .kiro-guard        ← Your exclusion list (one path per line)
-├── kiro-guard.py      ← Cross-platform launcher (sync, run, ask, login, status, test)
-├── kg-sync.sh         ← Linux: apply ACL rules
-├── kg-sync.bat        ← Windows: apply ACL rules
-├── install.sh         ← Linux: install kiro-guard globally on PATH
-├── install.bat        ← Windows: install kiro-guard globally on PATH
+├── .kiro-guard        ← Your exclusion list (one path or glob per line)
+├── kiro-guard.py      ← Launcher (sync, run, ask, login, status, test)
+├── kg-sync.sh         ← Applies ACL rules via setfacl
+├── install.sh         ← Installs kiro-guard globally on PATH
 └── README.md
 ```
 
 ---
 
-## Installation (put it on PATH)
+## Installation
 
 Run once — after this you can call `kiro-guard` from anywhere.
 
-**Linux:**
 ```bash
 sudo bash install.sh
 ```
-Installs to `/usr/local/lib/kiro-guard/` and creates a `/usr/local/bin/kiro-guard` wrapper.
 
-**Windows (run as Administrator):**
-```bat
-install.bat
-```
-Installs to `%ProgramFiles%\KiroGuard\` and adds it to the system PATH.
+Installs to `/usr/local/lib/kiro-guard/`, creates a `/usr/local/bin/kiro-guard` wrapper, and copies `kiro-cli` companion binaries into `kiro-runner`'s home so they can run headlessly.
 
-> Open a new terminal after Windows installation for the PATH change to take effect.
+> **Requires:** `acl` package — `sudo apt install acl`
 
 ---
 
@@ -65,7 +56,7 @@ Installs to `%ProgramFiles%\KiroGuard\` and adds it to the system PATH.
 ### 1. Add `.kiro-guard` to your project root
 
 ```ini
-# .kiro-guard — paths are relative to the project root
+# .kiro-guard — paths relative to the project root
 
 # ── Directories ───────────────────────────────────────────────────
 my-secret/
@@ -114,23 +105,20 @@ This will:
 2. Grant `kiro-runner` read+execute access on the project root.
 3. Apply a **hard deny** for every path listed in `.kiro-guard`.
 
-> Linux requires `sudo` internally — you'll be prompted.  
-> Windows requires the terminal to be running as Administrator.
+> `sudo` is required internally — you'll be prompted for your password.
 
 ---
 
 ### 3. First-time login (once per machine)
 
-Kiro needs to authenticate once under the `kiro-runner` identity:
-
 ```bash
 kiro-guard login
 ```
 
-Since `kiro-runner` runs headless (no display), login uses **device flow** — it prints a URL and a code. Open the URL in **your own browser**, enter the code, and approve. Tokens are stored under `/home/kiro-runner/` (Linux) or `C:\Users\kiro-runner\` (Windows).
+Since `kiro-runner` runs headless (no display), login uses **device flow** — it prints a URL and a short code. Open the URL in **your own browser**, enter the code, and approve. Tokens are stored under `/home/kiro-runner/`.
 
 ```
-▰▰▰▱▱▱▱ Waiting for browser... 
+▰▰▰▱▱▱▱ Waiting for browser...
 Open this URL: https://auth.kiro.dev/device?user_code=XXXX-XXXX
 ```
 
@@ -141,11 +129,6 @@ Open this URL: https://auth.kiro.dev/device?user_code=XXXX-XXXX
 **Open the full interactive CLI session** (recommended):
 ```bash
 kiro-guard run
-```
-This is equivalent to:
-```bash
-# Linux
-sudo -u kiro-runner /path/to/kiro-cli
 ```
 
 **Or send a single one-shot question:**
@@ -159,12 +142,12 @@ kiro-guard ask "which files do you have access to?"
 
 | Command | Description |
 |---------|-------------|
-| `kiro-guard sync` | Apply `.kiro-guard` rules to the OS |
-| `kiro-guard run` | Open `kiro-cli` **interactively** as the restricted user |
+| `kiro-guard sync` | Apply `.kiro-guard` rules via `setfacl` |
+| `kiro-guard run` | Open `kiro-cli` **interactively** as `kiro-runner` |
 | `kiro-guard ask "prompt"` | Send a **one-shot prompt** to `kiro-cli` |
-| `kiro-guard login` | First-time login via device flow (no browser needed in session) |
+| `kiro-guard login` | First-time login via device flow |
 | `kiro-guard status` | Show current ACL status for guarded paths |
-| `kiro-guard test` | Verify restricted user is blocked (Linux only) |
+| `kiro-guard test` | Verify `kiro-runner` is blocked from guarded paths |
 
 All commands auto-discover the project root by walking up the directory tree — no need to `cd` first.
 
@@ -180,52 +163,41 @@ kiro-guard status
 kiro-guard test
 ```
 
-Or manually (Linux):
+Or manually:
 ```bash
-getfacl circabc-secrets/
-# Expected: user:kiro-runner:---
+getfacl my-secret/
+# Expected line: user:kiro-runner:---
 ```
 
 ---
 
-## Understanding the permission models
+## Why not `chmod`?
 
-### Why not `chmod`?
+`chmod` works on 3 broad categories: **Owner / Group / Others**. There is no way to block a single specific user without affecting everyone else.
 
-`chmod` works on 3 broad categories: **Owner / Group / Others**. There is no way to target a single user without affecting everyone else.
+`setfacl` lets you say: *"Block specifically `kiro-runner`, leave everything else untouched."*
 
-`setfacl` / `icacls` let you say: *"Block specifically `kiro-runner`, leave everything else untouched."*
-
-### Comparison
-
-| Feature | `chmod` | `setfacl` / `icacls` |
-|---------|---------|----------------------|
+| Feature | `chmod` | `setfacl` |
+|---------|---------|-----------|
 | Target specific user | ❌ | ✅ |
 | Granularity | Broad (3 categories) | Fine-grained (per user) |
 | Risk of locking yourself out | High | Low |
-| View full rules | `ls -l` | `getfacl` / `icacls` |
+| View rules | `ls -l` | `getfacl` |
 
 ---
 
 ## Troubleshooting
 
-**`setfacl: command not found` (Linux)**
+**`setfacl: command not found`**
 ```bash
 sudo apt install acl
 ```
 
 **Parent directory permission error**
 
-`kiro-runner` needs execute (`--x`) on every folder in the path leading to your project. On bare Ubuntu the home directory may be `700`. Fix:
+`kiro-runner` needs execute (`--x`) on every folder in the path to your project. On bare Ubuntu the home directory may be `700`. Fix:
 ```bash
 chmod o+x /home/your-username
-```
-
-**Windows: `runas` prompts for a password**
-
-Set a password for `kiro-runner` after creating the user:
-```bat
-net user kiro-runner YourChosenPassword
 ```
 
 **Kiro can still read a file after sync**
@@ -240,18 +212,11 @@ kiro-guard test
 
 ## Cleanup
 
-To remove the restricted user and all its rules:
+To remove the restricted user and all its ACL rules:
 
-**Linux:**
 ```bash
 sudo setfacl -R -x user:kiro-runner .
-sudo deluser kiro-runner
-```
-
-**Windows:**
-```bat
-icacls . /remove kiro-runner /t
-net user kiro-runner /delete
+sudo deluser --remove-home kiro-runner
 ```
 
 ---

@@ -1,26 +1,24 @@
 #!/usr/bin/env python3
 """
-kiro-guard.py — Cross-platform launcher for Kiro with access control.
+kiro-guard.py — Linux launcher for Kiro with filesystem ACL access control.
 
 Can be installed globally on PATH. Automatically walks up the directory tree
 to find the nearest .kiro-guard file (like git finds .git).
 Supports * and ** glob patterns in .kiro-guard.
 
 Usage:
-    kiro-guard sync            # Sync .kiro-guard rules to the OS
-    kiro-guard run "prompt"    # Run Kiro as the restricted user
+    kiro-guard sync            # Sync .kiro-guard rules to the OS (requires sudo)
+    kiro-guard run             # Open kiro-cli interactively as the restricted user
+    kiro-guard ask "prompt"    # Send a one-shot prompt to kiro-cli
     kiro-guard login           # Perform first-time Kiro login as restricted user
     kiro-guard status          # Show current ACL status for guarded paths
     kiro-guard test            # Verify restricted user cannot read guarded paths
 
 Requires:
-    Linux : setfacl / acl package (sudo apt install acl)
-    Windows: icacls (built-in), run as Administrator for sync
+    setfacl / acl package (sudo apt install acl)
 """
 
-import glob
 import os
-import platform
 import shutil
 import subprocess
 import sys
@@ -29,10 +27,9 @@ from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 RESTRICTED_USER = "kiro-runner"
-GUARD_FILENAME = ".kiro-guard"
-OS = platform.system()  # "Linux" | "Windows" | "Darwin"
+GUARD_FILENAME  = ".kiro-guard"
 
-# Directory where this script lives (used to find kg-sync.sh / kg-sync.bat)
+# Directory where this script lives (used to find kg-sync.sh)
 SCRIPT_DIR = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -78,28 +75,26 @@ def expand_patterns(guard_root: str, patterns: list[str]) -> list[str]:
     """
     Expand glob patterns relative to guard_root.
     Supports * (single-level) and ** (recursive).
-    Returns a sorted, deduplicated list of absolute paths that actually exist.
+    Returns a sorted, deduplicated list of absolute paths.
     """
     resolved: set[str] = set()
     root = Path(guard_root)
 
     for pattern in patterns:
-        # Use pathlib glob (supports ** recursion)
         matches = list(root.glob(pattern))
         if matches:
             for match in matches:
                 resolved.add(str(match.resolve()))
         else:
-            # Pattern matched nothing — keep it so we can report it as "not found"
+            # Pattern matched nothing — keep it so it shows as "not found"
             resolved.add(str((root / pattern).resolve()))
 
     return sorted(resolved)
 
 
-def run(cmd, **kwargs) -> int:
-    """Run a command and return its exit code."""
-    display = cmd if isinstance(cmd, str) else " ".join(str(c) for c in cmd)
-    print(f"  $ {display}")
+def run(cmd: list, **kwargs) -> int:
+    """Run a command, print it, and return its exit code."""
+    print(f"  $ {' '.join(str(c) for c in cmd)}")
     result = subprocess.run(cmd, **kwargs)
     return result.returncode
 
@@ -108,14 +103,12 @@ def resolve_bin(name: str) -> str:
     """
     Return the absolute path of a binary that kiro-runner can execute.
 
-    sudo -u / runas strips PATH, so we pass the full path explicitly.
+    sudo -u strips PATH, so we pass the full path explicitly.
     We prefer system-wide locations (/usr/local/bin, /usr/bin) over user-local
     ones (~/.local/bin) because kiro-runner cannot traverse other users' home
-    directories.  install.sh symlinks kiro-cli there for exactly this reason.
+    directories. install.sh symlinks/copies kiro-cli there for exactly this reason.
     """
-    # Prefer system-wide locations that any user (including kiro-runner) can reach
-    system_paths = ["/usr/local/bin", "/usr/bin", "/bin"]
-    for directory in system_paths:
+    for directory in ("/usr/local/bin", "/usr/bin", "/bin"):
         candidate = os.path.join(directory, name)
         if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
             return candidate
@@ -126,8 +119,8 @@ def resolve_bin(name: str) -> str:
         return path
 
     print(f"Error: '{name}' not found in PATH.")
-    print(f"Run 'sudo bash install.sh' to symlink Kiro binaries into /usr/local/bin,")
-    print(f"or make sure Kiro is installed system-wide.")
+    print("Run 'sudo bash install.sh' to copy Kiro binaries into /usr/local/bin,")
+    print("or make sure Kiro is installed system-wide.")
     sys.exit(1)
 
 
@@ -136,16 +129,20 @@ def resolve_bin(name: str) -> str:
 def cmd_sync(guard_root: str):
     """
     Expand globs, write resolved absolute paths to a temp file,
-    then call the OS-specific sync script with that file.
+    then call kg-sync.sh with that file.
     """
     patterns = read_raw_patterns(guard_root)
     resolved = expand_patterns(guard_root, patterns)
 
     print(f"Project root : {guard_root}")
     print(f"Patterns     : {len(patterns)} rule(s) → {len(resolved)} resolved path(s)")
-    print(f"Syncing on {OS}...\n")
+    print("Syncing on Linux...\n")
 
-    # Write resolved paths to a temp file for the shell script to consume
+    script = os.path.join(SCRIPT_DIR, "kg-sync.sh")
+    if not os.path.isfile(script):
+        print(f"Error: 'kg-sync.sh' not found at '{SCRIPT_DIR}'.")
+        sys.exit(1)
+
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".kiroguard-resolved", delete=False, encoding="utf-8"
     ) as tmp:
@@ -154,37 +151,17 @@ def cmd_sync(guard_root: str):
             tmp.write(p + "\n")
 
     try:
-        if OS == "Linux":
-            script = os.path.join(SCRIPT_DIR, "kg-sync.sh")
-            if not os.path.isfile(script):
-                print(f"Error: 'kg-sync.sh' not found at '{SCRIPT_DIR}'.")
-                sys.exit(1)
-            run(["sudo", "bash", script, guard_root, tmp_path])
-        elif OS == "Windows":
-            script = os.path.join(SCRIPT_DIR, "kg-sync.bat")
-            if not os.path.isfile(script):
-                print(f"Error: 'kg-sync.bat' not found at '{SCRIPT_DIR}'.")
-                sys.exit(1)
-            run(f'"{script}" "{guard_root}" "{tmp_path}"', shell=True)
-        else:
-            print(f"Unsupported OS: {OS}")
-            sys.exit(1)
+        run(["sudo", "bash", script, guard_root, tmp_path])
     finally:
         os.unlink(tmp_path)
 
 
 def cmd_run():
     """Open the kiro-cli interactive session as the restricted user."""
-    print(f"Opening kiro-cli as '{RESTRICTED_USER}'...(Ctrl+C to exit)\n")
+    print(f"Opening kiro-cli as '{RESTRICTED_USER}'... (Ctrl+C to exit)\n")
     kiro_bin = resolve_bin("kiro-cli")
-    if OS == "Linux":
-        # -H sets HOME to kiro-runner's home so kiro-cli finds its own config/creds
-        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin])
-    elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "{kiro_bin}"', shell=True)
-    else:
-        print(f"Unsupported OS: {OS}")
-        sys.exit(1)
+    # -H sets HOME to kiro-runner's home so kiro-cli finds its own config/creds
+    run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin])
 
 
 def cmd_ask(prompt: str):
@@ -194,28 +171,16 @@ def cmd_ask(prompt: str):
         sys.exit(1)
     print(f"Asking Kiro as '{RESTRICTED_USER}'...\n")
     kiro_bin = resolve_bin("kiro-cli")
-    if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin, prompt])
-    elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "{kiro_bin} \\"{prompt}\\""', shell=True)
-    else:
-        print(f"Unsupported OS: {OS}")
-        sys.exit(1)
+    run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_bin, prompt])
 
 
 def cmd_login():
     """Perform first-time Kiro CLI login as the restricted user."""
     print(f"Starting Kiro login for user '{RESTRICTED_USER}'...\n")
-    # Both sudo -u (Linux) and runas (Windows) strip the calling user's PATH.
-    # Resolve the binary to its absolute path before switching users.
+    # sudo -u strips PATH; resolve the binary to its absolute path first.
+    # --use-device-flow avoids opening a browser in the headless restricted session.
     kiro_cli_bin = resolve_bin("kiro-cli")
-    if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_cli_bin, "login", "--use-device-flow"])
-    elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "{kiro_cli_bin} login --use-device-flow"', shell=True)
-    else:
-        print(f"Unsupported OS: {OS}")
-        sys.exit(1)
+    run(["sudo", "-u", RESTRICTED_USER, "-H", kiro_cli_bin, "login", "--use-device-flow"])
 
 
 def cmd_status(guard_root: str):
@@ -233,30 +198,18 @@ def cmd_status(guard_root: str):
         tag = "EXISTS   " if exists else "NOT FOUND"
         print(f"  [{tag}] {rel}")
         if exists:
-            if OS == "Linux":
-                result = subprocess.run(
-                    ["getfacl", "--omit-header", abs_path],
-                    capture_output=True, text=True
-                )
-                for line in result.stdout.splitlines():
-                    if RESTRICTED_USER in line or line.startswith("user::") or line.startswith("other::"):
-                        print(f"             {line}")
-            elif OS == "Windows":
-                result = subprocess.run(
-                    ["icacls", abs_path], capture_output=True, text=True
-                )
-                for line in result.stdout.splitlines():
-                    if RESTRICTED_USER in line:
-                        print(f"             {line.strip()}")
+            result = subprocess.run(
+                ["getfacl", "--omit-header", abs_path],
+                capture_output=True, text=True
+            )
+            for line in result.stdout.splitlines():
+                if RESTRICTED_USER in line or line.startswith("user::") or line.startswith("other::"):
+                    print(f"             {line}")
         print()
 
 
 def cmd_test(guard_root: str):
-    """Verify the restricted user cannot read any resolved guarded path (Linux only)."""
-    if OS != "Linux":
-        print("The 'test' command is only supported on Linux.")
-        sys.exit(1)
-
+    """Verify the restricted user cannot read any resolved guarded path."""
     patterns = read_raw_patterns(guard_root)
     resolved = expand_patterns(guard_root, patterns)
 
@@ -290,15 +243,15 @@ def cmd_test(guard_root: str):
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 USAGE = """
-Kiro-Guard — Restrict Kiro AI access to sensitive files
+Kiro-Guard — Restrict Kiro AI access to sensitive files (Linux)
 
 Usage:
-  kiro-guard sync              Apply .kiro-guard rules to the OS
+  kiro-guard sync              Apply .kiro-guard rules via setfacl (requires sudo)
   kiro-guard run               Open kiro-cli interactively as the restricted user
   kiro-guard ask "prompt"      Send a one-shot prompt to kiro-cli
-  kiro-guard login             First-time login as restricted user
+  kiro-guard login             First-time login as restricted user (device flow)
   kiro-guard status            Show ACL status for guarded paths
-  kiro-guard test              Verify restricted user is blocked (Linux)
+  kiro-guard test              Verify restricted user is blocked
 
 Kiro-Guard searches for .kiro-guard starting from your current directory
 and walking up, so you can call it from anywhere within your project.
@@ -316,7 +269,7 @@ if __name__ == "__main__":
 
     command = sys.argv[1].lower()
 
-    # Commands that need project root
+    # Commands that need project root discovery
     if command in ("sync", "status", "test"):
         root = find_guard_root()
 
