@@ -51,6 +51,9 @@ echo Done! You can now run 'kiro-guard' from any terminal (after reopening it).
 echo.
 echo Try it:
 echo   kiro-guard sync       (from inside any project with a .kiro-guard file)
+echo   kiro-guard login      (first-time auth as kiro-runner)
+echo   kiro-guard run        (open kiro-cli interactive session)
+echo   kiro-guard ask "your question"
 echo.
 pause
 endlocal

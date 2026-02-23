@@ -22,7 +22,7 @@ Kiro runs as a separate local user (`kiro-runner`). Your sensitive files are loc
 ```
 kiro-guard/
 ├── .kiro-guard        ← Your exclusion list (one path per line)
-├── kiro-guard.py      ← Cross-platform launcher (sync, run, login, status, test)
+├── kiro-guard.py      ← Cross-platform launcher (sync, run, ask, login, status, test)
 ├── kg-sync.sh         ← Linux: apply ACL rules
 ├── kg-sync.bat        ← Windows: apply ACL rules
 ├── install.sh         ← Linux: install kiro-guard globally on PATH
@@ -119,20 +119,30 @@ Kiro needs to authenticate once under the `kiro-runner` identity:
 kiro-guard login
 ```
 
-This triggers the browser SSO flow and stores tokens under `/home/kiro-runner/` (Linux) or `C:\Users\kiro-runner\` (Windows).
+Since `kiro-runner` runs headless (no display), login uses **device flow** — it prints a URL and a code. Open the URL in **your own browser**, enter the code, and approve. Tokens are stored under `/home/kiro-runner/` (Linux) or `C:\Users\kiro-runner\` (Windows).
+
+```
+▰▰▰▱▱▱▱ Waiting for browser... 
+Open this URL: https://auth.kiro.dev/device?user_code=XXXX-XXXX
+```
 
 ---
 
-### 4. Run Kiro
+### 4. Use Kiro
 
+**Open the full interactive CLI session** (recommended):
 ```bash
-kiro-guard run "Refactor the code in src/"
+kiro-guard run
 ```
-
-This is the equivalent of:
+This is equivalent to:
 ```bash
 # Linux
-sudo -u kiro-runner kiro "Refactor the code in src/"
+sudo -u kiro-runner /path/to/kiro-cli
+```
+
+**Or send a single one-shot question:**
+```bash
+kiro-guard ask "which files do you have access to?"
 ```
 
 ---
@@ -142,8 +152,9 @@ sudo -u kiro-runner kiro "Refactor the code in src/"
 | Command | Description |
 |---------|-------------|
 | `kiro-guard sync` | Apply `.kiro-guard` rules to the OS |
-| `kiro-guard run "prompt"` | Run Kiro as the restricted user |
-| `kiro-guard login` | First-time Kiro login as restricted user |
+| `kiro-guard run` | Open `kiro-cli` **interactively** as the restricted user |
+| `kiro-guard ask "prompt"` | Send a **one-shot prompt** to `kiro-cli` |
+| `kiro-guard login` | First-time login via device flow (no browser needed in session) |
 | `kiro-guard status` | Show current ACL status for guarded paths |
 | `kiro-guard test` | Verify restricted user is blocked (Linux only) |
 

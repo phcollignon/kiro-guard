@@ -160,13 +160,26 @@ def cmd_sync(guard_root: str):
         os.unlink(tmp_path)
 
 
-def cmd_run(prompt: str):
-    """Run Kiro as the restricted user with the given prompt."""
+def cmd_run():
+    """Open the kiro-cli interactive session as the restricted user."""
+    print(f"Opening kiro-cli as '{RESTRICTED_USER}'...(Ctrl+C to exit)\n")
+    kiro_bin = resolve_bin("kiro-cli")
+    if OS == "Linux":
+        run(["sudo", "-u", RESTRICTED_USER, kiro_bin])
+    elif OS == "Windows":
+        run(f'runas /user:{RESTRICTED_USER} "{kiro_bin}"', shell=True)
+    else:
+        print(f"Unsupported OS: {OS}")
+        sys.exit(1)
+
+
+def cmd_ask(prompt: str):
+    """Send a single prompt to kiro-cli as the restricted user."""
     if not prompt.strip():
         print("Error: prompt cannot be empty.")
         sys.exit(1)
-    print(f"Running Kiro as '{RESTRICTED_USER}'...\n")
-    kiro_bin = resolve_bin("kiro")
+    print(f"Asking Kiro as '{RESTRICTED_USER}'...\n")
+    kiro_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
         run(["sudo", "-u", RESTRICTED_USER, kiro_bin, prompt])
     elif OS == "Windows":
@@ -267,7 +280,8 @@ Kiro-Guard — Restrict Kiro AI access to sensitive files
 
 Usage:
   kiro-guard sync              Apply .kiro-guard rules to the OS
-  kiro-guard run "prompt"      Run Kiro as the restricted user
+  kiro-guard run               Open kiro-cli interactively as the restricted user
+  kiro-guard ask "prompt"      Send a one-shot prompt to kiro-cli
   kiro-guard login             First-time login as restricted user
   kiro-guard status            Show ACL status for guarded paths
   kiro-guard test              Verify restricted user is blocked (Linux)
@@ -295,10 +309,12 @@ if __name__ == "__main__":
     if command == "sync":
         cmd_sync(root)
     elif command == "run":
+        cmd_run()
+    elif command == "ask":
         if len(sys.argv) < 3:
-            print('Error: provide a prompt. Example: kiro-guard run "your prompt"')
+            print('Error: provide a prompt. Example: kiro-guard ask "your prompt"')
             sys.exit(1)
-        cmd_run(" ".join(sys.argv[2:]))
+        cmd_ask(" ".join(sys.argv[2:]))
     elif command == "login":
         cmd_login()
     elif command == "status":
