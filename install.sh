@@ -64,9 +64,9 @@ for bin_name in kiro-cli kiro; do
     done
 
     if [ -n "$found" ]; then
-        ln -sf "$found" "$BIN_DIR/$bin_name"
-        chmod a+rx "$found"          # ensure kiro-runner can execute it
-        echo "  Symlinked: $found → $BIN_DIR/$bin_name"
+        cp "$found" "$BIN_DIR/$bin_name"
+        chmod a+rx "$BIN_DIR/$bin_name"
+        echo "  Copied : $found → $BIN_DIR/$bin_name"
     elif [ -x "$BIN_DIR/$bin_name" ]; then
         echo "  Already in $BIN_DIR: $bin_name"
     else
