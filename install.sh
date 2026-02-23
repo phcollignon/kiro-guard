@@ -5,13 +5,13 @@
 # Usage: sudo bash install.sh
 # =============================================================================
 
-set -euo pipefail
+set -eu
 
 INSTALL_DIR="/usr/local/lib/kiro-guard"
 BIN_DIR="/usr/local/bin"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-if [[ $EUID -ne 0 ]]; then
+if [ "$(id -u)" -ne 0 ]; then
     echo "Error: Run this script as root: sudo bash install.sh" >&2
     exit 1
 fi
