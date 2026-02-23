@@ -1,4 +1,4 @@
-# Kiro-Guard 🛡️
+# Kiro-Guard 🛡️Restrict Kiro CLI access to your sensitive files
 
 Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using native filesystem ACLs on Linux and macOS.
 
