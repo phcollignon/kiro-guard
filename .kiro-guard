@@ -1,0 +1,38 @@
+# .kiro-guard
+# ─────────────────────────────────────────────────────────────────────────────
+# List files and folders to hide from the Kiro AI user (kiro-runner).
+# Paths are relative to the project root (where this file lives).
+# Lines starting with # are comments. Blank lines are ignored.
+#
+# Supported patterns:
+#   my-secret/             → entire directory and its contents
+#   environments/.env.prod → a specific file
+#   **/.env                → any file named .env at any depth (recursive)
+#   **/.env.*              → any .env.* file at any depth (.env.prod, .env.local …)
+#   **/secrets/            → any directory named secrets/ at any depth
+#   config/*.key           → any .key file directly inside config/
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Directories ───────────────────────────────────────────────────────────────
+my-secret/
+.ssh/
+certificates/
+
+# ── Specific files ────────────────────────────────────────────────────────────
+environments/.env.prod
+environments/.env.staging
+config/secrets.yaml
+config/credentials.json
+
+# ── Recursive wildcards (**) ──────────────────────────────────────────────────
+# Hide every .env file at any depth
+**/.env
+**/.env.*
+
+# Hide every file inside any "secrets" folder
+**/secrets/*
+
+# ── Single-level wildcards (*) ────────────────────────────────────────────────
+# Hide all .key and .pem files in the certs/ folder
+certs/*.key
+certs/*.pem
