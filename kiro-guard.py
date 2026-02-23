@@ -21,6 +21,7 @@ Requires:
 import glob
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -103,6 +104,20 @@ def run(cmd, **kwargs) -> int:
     return result.returncode
 
 
+def resolve_bin(name: str) -> str:
+    """
+    Return the absolute path of a binary visible to the *current* user.
+    sudo -u strips PATH, so we must pass the full path explicitly.
+    Exits with a helpful message if the binary is not found.
+    """
+    path = shutil.which(name)
+    if not path:
+        print(f"Error: '{name}' not found in PATH.")
+        print(f"Make sure Kiro is installed and on your PATH, then retry.")
+        sys.exit(1)
+    return path
+
+
 # ── Commands ───────────────────────────────────────────────────────────────────
 
 def cmd_sync(guard_root: str):
@@ -151,10 +166,11 @@ def cmd_run(prompt: str):
         print("Error: prompt cannot be empty.")
         sys.exit(1)
     print(f"Running Kiro as '{RESTRICTED_USER}'...\n")
+    kiro_bin = resolve_bin("kiro")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, "kiro", prompt])
+        run(["sudo", "-u", RESTRICTED_USER, kiro_bin, prompt])
     elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "kiro \\"{prompt}\\""', shell=True)
+        run(f'runas /user:{RESTRICTED_USER} "{kiro_bin} \\"{prompt}\\""', shell=True)
     else:
         print(f"Unsupported OS: {OS}")
         sys.exit(1)
@@ -163,10 +179,13 @@ def cmd_run(prompt: str):
 def cmd_login():
     """Perform first-time Kiro CLI login as the restricted user."""
     print(f"Starting Kiro login for user '{RESTRICTED_USER}'...\n")
+    # Both sudo -u (Linux) and runas (Windows) strip the calling user's PATH.
+    # Resolve the binary to its absolute path before switching users.
+    kiro_cli_bin = resolve_bin("kiro-cli")
     if OS == "Linux":
-        run(["sudo", "-u", RESTRICTED_USER, "kiro-cli", "login"])
+        run(["sudo", "-u", RESTRICTED_USER, kiro_cli_bin, "login"])
     elif OS == "Windows":
-        run(f'runas /user:{RESTRICTED_USER} "kiro-cli login"', shell=True)
+        run(f'runas /user:{RESTRICTED_USER} "{kiro_cli_bin} login"', shell=True)
     else:
         print(f"Unsupported OS: {OS}")
         sys.exit(1)
