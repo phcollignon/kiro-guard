@@ -64,6 +64,7 @@ for bin_name in kiro-cli kiro; do
     done
 
     if [ -n "$found" ]; then
+        rm -f "$BIN_DIR/$bin_name"          # remove old symlink or stale copy first
         cp "$found" "$BIN_DIR/$bin_name"
         chmod a+rx "$BIN_DIR/$bin_name"
         echo "  Copied : $found → $BIN_DIR/$bin_name"
