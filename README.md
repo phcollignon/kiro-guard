@@ -2,6 +2,8 @@
 
 Run [Kiro](https://kiro.dev) as a restricted OS user that is **physically blocked** from your secret files — using native filesystem ACLs on Linux and macOS.
 
+![Kiro-Guard access control schema](schema.png)
+
 ---
 
 ## The problem
